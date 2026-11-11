@@ -1,0 +1,12 @@
+# Quem é chamado para revisar cada pasta.
+# A última regra que casa com o arquivo é a que vale.
+# Troque pelos donos de cada área quando o grupo definir.
+
+*                       @henriqueluza
+
+# /services/core-api/   @usuario
+# /services/mcp-server/ @usuario
+# /services/agent/      @usuario
+# /pipelines/           @usuario
+# /ml/                  @usuario
+# /infra/               @usuario

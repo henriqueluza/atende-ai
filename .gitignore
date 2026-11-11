@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Segredos e configuração local
+.env
+.env.*
+!.env.example
+
+# Dados e modelos (não versionar)
+data/
+*.pkl
+*.joblib
+mlruns/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Editor e sistema
+.vscode/
+.idea/
+.DS_Store
