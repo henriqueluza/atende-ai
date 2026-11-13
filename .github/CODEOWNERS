@@ -9,4 +9,5 @@
 # /services/agent/      @usuario
 # /pipelines/           @usuario
 # /ml/                  @usuario
-# /infra/               @usuario
+/infra/                 @neozmmv
+/.github/workflows      @neozmmv
