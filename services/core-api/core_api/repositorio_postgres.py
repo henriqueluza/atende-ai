@@ -1,6 +1,8 @@
 """Repositório em Postgres + pgvector. O filtro de visibilidade fica dentro do SQL."""
 
 import math
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import psycopg
 from psycopg import sql
@@ -45,7 +47,7 @@ class RepositorioPostgres:
         # DDL não aceita parâmetro (%s), então a dimensão entra pelo compositor do psycopg, que
         # escapa o valor. Ela é um inteiro vindo da configuração do operador, nunca de requisição.
         esquema = sql.SQL(_ESQUEMA).format(dimensao=sql.Literal(int(self._dimensao)))
-        with self._conectar() as conexao:
+        with self._conexao() as conexao:
             # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query  # noqa: E501
             conexao.execute(esquema)
             [existente] = conexao.execute(
@@ -59,7 +61,7 @@ class RepositorioPostgres:
             )
 
     def salvar(self, documento: Documento, trechos: list[Trecho]) -> None:
-        with self._conectar() as conexao:  # uma transação: ou entra tudo, ou nada
+        with self._conexao() as conexao:  # uma transação: ou entra tudo, ou nada
             conexao.execute("DELETE FROM documentos WHERE nome = %s", (documento.nome,))
             conexao.execute(
                 "INSERT INTO documentos (id, nome, visibilidade) VALUES (%s, %s, %s)",
@@ -78,13 +80,16 @@ class RepositorioPostgres:
         self, embedding: list[float], k: int, visibilidade: Visibilidade
     ) -> list[ResultadoBusca]:
         parametros = {"vetor": _vetor(embedding), "visibilidade": visibilidade.value, "k": k}
-        with self._conectar() as conexao:
+        with self._conexao() as conexao:
             linhas = conexao.execute(_BUSCA, parametros).fetchall()
         return [ResultadoBusca(texto, nome, _score(score)) for texto, nome, score in linhas]
 
-    def _conectar(self) -> psycopg.Connection:
+    @contextmanager
+    def _conexao(self) -> Iterator[psycopg.Connection]:
+        """Abre uma transação. Qualquer falha do banco vira AcervoIndisponivel (HTTP 503)."""
         try:
-            return psycopg.connect(self._url, connect_timeout=5)
+            with psycopg.connect(self._url, connect_timeout=5) as conexao:
+                yield conexao
         except psycopg.Error as erro:
             raise AcervoIndisponivel("banco de dados") from erro
 
