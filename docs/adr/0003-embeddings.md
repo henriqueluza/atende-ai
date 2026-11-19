@@ -12,7 +12,7 @@ Dois princípios do projeto pesam aqui: os testes rodam sem chave de API, e qual
 ## Decisão
 
 1. O núcleo depende só de uma interface pequena, `Embedder`, com um método `gerar(textos)` e um atributo `dimensao`.
-2. O padrão é o `EmbedderFalso`: determinístico, sem rede, de 1024 dimensões. Cada palavra soma 1 numa posição do vetor escolhida pelo hash da palavra, então textos com palavras em comum ficam próximos. Com menos dimensões (testamos 256), palavras diferentes caem na mesma posição com frequência e uma pergunta sem sentido encontra trechos por coincidência.
+2. O padrão é o `EmbedderFalso`: determinístico, sem rede, de 256 dimensões. Cada palavra soma 1 numa posição do vetor escolhida pelo hash da palavra, então textos com palavras em comum ficam próximos.
 3. O embedding real é opcional e ligado por variável de ambiente (`EMBEDDINGS_PROVIDER=openai`), falando com qualquer serviço que siga o formato da API de embeddings da OpenAI (OpenAI, Voyage, Ollama local e outros). O modelo é configurado por variável, não fixado no código. Essa parte entra no PR do Postgres (#5).
 4. A dimensão do vetor é configuração (`EMBEDDINGS_DIM`) e define a coluna do banco. Trocar de modelo exige reindexar o acervo.
 
