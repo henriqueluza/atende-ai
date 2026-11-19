@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from core_api.dominio import Documento, Trecho, Visibilidade
+from core_api.dominio import AcervoIndisponivel, Documento, Trecho, Visibilidade
 from core_api.embeddings import EmbedderFalso
 from core_api.repositorio_postgres import RepositorioPostgres
 
@@ -61,3 +61,10 @@ def test_postgres_recusa_iniciar_com_dimensao_diferente_da_do_banco(url_postgres
 
     with pytest.raises(RuntimeError, match="dimensões"):
         RepositorioPostgres(url_postgres_limpo, DIMENSAO + 1).preparar()
+
+
+def test_falha_do_banco_no_meio_da_operacao_vira_acervo_indisponivel(url_postgres_limpo):
+    repositorio = RepositorioPostgres(url_postgres_limpo, DIMENSAO)  # sem preparar: não há tabela
+
+    with pytest.raises(AcervoIndisponivel):
+        _buscar(repositorio, "horário", Visibilidade.PUBLICO)
