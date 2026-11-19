@@ -1,0 +1,61 @@
+# Sobe o sistema inteiro: docker compose up -d
+# Todas as portas ficam presas em 127.0.0.1: nada é exposto para a rede.
+
+name: atende-ai
+
+x-servico-python: &servico-python
+  build:
+    context: .
+    dockerfile: infra/Dockerfile
+  restart: unless-stopped
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?copie .env.example para .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copie .env.example para .env}
+      POSTGRES_DB: ${POSTGRES_DB:?copie .env.example para .env}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - dados-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  core-api:
+    <<: *servico-python
+    command: uvicorn core_api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:${CORE_API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mcp-server:
+    <<: *servico-python
+    command: uvicorn mcp_server.main:app --host 0.0.0.0 --port 8001
+    environment:
+      CORE_API_URL: http://core-api:8000
+    ports:
+      - "127.0.0.1:${MCP_SERVER_PORT:-8001}:8001"
+    depends_on:
+      core-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  dados-db:
