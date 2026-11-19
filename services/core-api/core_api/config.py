@@ -20,7 +20,7 @@ def montar_acervo(ambiente: dict[str, str] | None = None) -> Acervo:
 
 def _embedder(ambiente: dict[str, str]) -> Embedder:
     provedor = ambiente.get("EMBEDDINGS_PROVIDER") or "fake"
-    dimensao = int(ambiente.get("EMBEDDINGS_DIM") or 256)
+    dimensao = int(ambiente.get("EMBEDDINGS_DIM") or 1024)
     if provedor == "fake":
         return EmbedderFalso(dimensao)
     if provedor == "openai":
