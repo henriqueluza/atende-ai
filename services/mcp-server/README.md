@@ -4,6 +4,16 @@ Servidor MCP que expõe as ferramentas do núcleo de conhecimento para agentes. 
 
 O contrato é a fronteira entre as duas metades do sistema (núcleo e agente). Por isso muda pouco e com cuidado: veja "Como o contrato evolui" no fim.
 
+## Como usar
+
+Com o sistema no ar (`docker compose up -d`), o servidor fica em `http://localhost:8001/mcp`. Qualquer cliente MCP pode se conectar. O do projeto é o agente:
+
+```bash
+python -m agent.cli ask "Qual o horário de funcionamento?"
+```
+
+O código está em `mcp_server/main.py`. Testes: `pytest services/mcp-server` (com o core-api simulado).
+
 ## Conexão
 
 | Item | Valor |
