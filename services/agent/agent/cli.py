@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-from agent.atendente import ErroDeBusca, Resposta, busca_por_mcp, responder
+from agent.atendente import SCORE_MINIMO, ErroDeBusca, Resposta, busca_por_mcp, responder
 from agent.llm import LLM, MODELO_PADRAO, ErroDoLLM, LLMClaude, LLMFalso
 
 
@@ -24,10 +24,10 @@ def main(argumentos: list[str] | None = None) -> int:
             print(ingerir(Path(opcoes.arquivo), opcoes.visibilidade, _core_api()))
         else:
             buscar = busca_por_mcp(os.environ.get("MCP_SERVER_URL") or "http://localhost:8001/mcp")
-            print(
-                formatar(asyncio.run(responder(opcoes.pergunta, buscar, escolher_llm(), opcoes.k)))
-            )
-    except (ErroDeBusca, ErroDoLLM, ErroDeUso) as erro:
+            minimo = float(os.environ.get("SCORE_MINIMO") or SCORE_MINIMO)
+            resposta = responder(opcoes.pergunta, buscar, escolher_llm(), opcoes.k, minimo)
+            print(formatar(asyncio.run(resposta)))
+    except (ErroDeBusca, ErroDoLLM, ErroDeUso, ValueError) as erro:
         print(f"Erro: {erro}", file=sys.stderr)
         return 1
     return 0
@@ -39,7 +39,7 @@ class ErroDeUso(Exception):
 
 def ingerir(arquivo: Path, visibilidade: str, core_api: httpx.Client) -> str:
     try:
-        conteudo = arquivo.read_text(encoding="utf-8")
+        conteudo = arquivo.read_text(encoding="utf-8-sig")  # aceita arquivo com BOM
     except (OSError, UnicodeDecodeError) as erro:
         raise ErroDeUso(f"Não consegui ler {arquivo} como texto UTF-8.") from erro
     corpo = {"nome": arquivo.name, "conteudo": conteudo, "visibilidade": visibilidade}
@@ -47,9 +47,14 @@ def ingerir(arquivo: Path, visibilidade: str, core_api: httpx.Client) -> str:
         resposta = core_api.post("/documentos", json=corpo)
     except httpx.HTTPError as erro:
         raise ErroDeUso("Não consegui falar com o core-api. Rodou docker compose up?") from erro
-    if resposta.status_code != 201:
-        raise ErroDeUso(f"O core-api recusou o documento (HTTP {resposta.status_code}).")
-    dados = resposta.json()
+    try:
+        dados = resposta.json()
+    except ValueError:
+        dados = {}
+    if resposta.status_code != 201 or not isinstance(dados, dict):
+        detalhe = dados.get("detail") if isinstance(dados, dict) else None
+        motivo = f": {detalhe}" if isinstance(detalhe, str) else "."
+        raise ErroDeUso(f"O core-api recusou o documento (HTTP {resposta.status_code}){motivo}")
     return (
         f"Documento {dados['nome']} indexado como {dados['visibilidade']}: "
         f"{dados['trechos']} trecho(s)."
@@ -69,13 +74,34 @@ def escolher_llm(ambiente: dict[str, str] | None = None) -> LLM:
 
 
 def formatar(resposta: Resposta) -> str:
-    linhas = ["Resposta:"] + [f"  {linha}" for linha in resposta.texto.splitlines()]
+    linhas = ["Resposta:"] + [f"  {linha}" for linha in _sem_controle(resposta.texto).splitlines()]
     if resposta.fontes:
         linhas += ["", "Fontes:"]
     for numero, fonte in enumerate(resposta.fontes, start=1):
-        linhas.append(f"  [{numero}] {fonte.documento} (score {fonte.score:.2f})")
-        linhas += [f"      {linha}" for linha in fonte.trecho.splitlines() if linha.strip()]
+        linhas.append(f"  [{numero}] {_sem_controle(fonte.documento)} (score {fonte.score:.2f})")
+        trecho = _sem_controle(fonte.trecho)
+        linhas += [f"      {linha}" for linha in trecho.splitlines() if linha.strip()]
     return "\n".join(linhas)
+
+
+def _sem_controle(texto: str) -> str:
+    """Tira caracteres de controle (menos quebra de linha e tab) antes de imprimir.
+
+    O texto vem de documentos enviados por pessoas e poderia trazer códigos que mexem no terminal.
+    """
+    return "".join(letra for letra in texto if letra in "\n\t" or letra.isprintable())
+
+
+# Só estas variáveis são lidas do .env. Um .env desconhecido na pasta atual não consegue,
+# por exemplo, desviar as chamadas da Anthropic para outro endereço.
+VARIAVEIS_DO_ENV = {
+    "LLM_PROVIDER",
+    "LLM_MODEL",
+    "ANTHROPIC_API_KEY",
+    "CORE_API_URL",
+    "MCP_SERVER_URL",
+    "SCORE_MINIMO",
+}
 
 
 def carregar_env(arquivo: Path = Path(".env")) -> None:
@@ -84,8 +110,8 @@ def carregar_env(arquivo: Path = Path(".env")) -> None:
         return
     for linha in arquivo.read_text(encoding="utf-8").splitlines():
         chave, separador, valor = linha.partition("=")
-        if separador and not chave.strip().startswith("#"):
-            os.environ.setdefault(chave.strip(), valor.strip())
+        if separador and chave.strip() in VARIAVEIS_DO_ENV:
+            os.environ.setdefault(chave.strip(), valor.strip().strip("\"'"))
 
 
 def _core_api() -> httpx.Client:
@@ -102,7 +128,14 @@ def _ler_argumentos(argumentos: list[str] | None) -> argparse.Namespace:
     ingest.add_argument("--visibilidade", required=True, choices=["publico", "interno"])
     ask = comandos.add_parser("ask", help="faz uma pergunta ao acervo público")
     ask.add_argument("pergunta")
-    ask.add_argument("-k", type=int, default=3, help="quantos trechos buscar (1 a 10)")
+    ask.add_argument(
+        "-k",
+        type=int,
+        default=3,
+        choices=range(1, 11),
+        metavar="K",
+        help="trechos a buscar (1 a 10)",
+    )
     return leitor.parse_args(argumentos)
 
 
