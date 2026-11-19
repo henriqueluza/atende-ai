@@ -42,8 +42,11 @@ class RepositorioPostgres:
 
     def preparar(self) -> None:
         """Cria extensão e tabelas se não existirem. Seguro de chamar a cada início."""
-        esquema = sql.SQL(_ESQUEMA).format(dimensao=sql.Literal(self._dimensao))
+        # DDL não aceita parâmetro (%s), então a dimensão entra pelo compositor do psycopg, que
+        # escapa o valor. Ela é um inteiro vindo da configuração do operador, nunca de requisição.
+        esquema = sql.SQL(_ESQUEMA).format(dimensao=sql.Literal(int(self._dimensao)))
         with self._conectar() as conexao:
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query  # noqa: E501
             conexao.execute(esquema)
             [existente] = conexao.execute(
                 "SELECT atttypmod FROM pg_attribute "
