@@ -18,7 +18,7 @@ class EmbedderFalso:
     serve para o CI e para rodar o sistema de graça, não para medir qualidade de busca.
     """
 
-    def __init__(self, dimensao: int = 256) -> None:
+    def __init__(self, dimensao: int = 1024) -> None:
         self.dimensao = dimensao
 
     def gerar(self, textos: list[str]) -> list[list[float]]:
