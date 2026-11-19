@@ -5,6 +5,10 @@ from enum import StrEnum
 from typing import Protocol
 
 
+class AcervoIndisponivel(Exception):
+    """Banco ou serviço de embeddings fora do ar. O detalhe vai para o log, não para o cliente."""
+
+
 class Visibilidade(StrEnum):
     """Quem pode ver um documento. O agente de atendimento só enxerga PUBLICO."""
 

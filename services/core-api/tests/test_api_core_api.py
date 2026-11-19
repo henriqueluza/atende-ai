@@ -1,4 +1,5 @@
 import pytest
+from core_api.config import montar_acervo
 from core_api.main import criar_app
 from fastapi.testclient import TestClient
 
@@ -8,7 +9,9 @@ SIGILOSO = "## Horário de funcionamento da diretoria\n\nMargem de lucro secreta
 
 @pytest.fixture
 def api():
-    return TestClient(criar_app())
+    return TestClient(
+        criar_app(montar_acervo({})), base_url="http://localhost"
+    )  # em memória, embedder falso
 
 
 def _ingerir(api, nome, conteudo, visibilidade):
@@ -80,3 +83,9 @@ def test_ingestao_recusa_entrada_invalida(api, corpo):
 )
 def test_busca_recusa_entrada_invalida(api, parametros):
     assert api.get("/busca", params=parametros).status_code == 422
+
+
+def test_requisicao_com_host_desconhecido_e_recusada(api):
+    resposta = api.get("/busca", params={"pergunta": "oi"}, headers={"host": "site-malicioso.test"})
+
+    assert resposta.status_code == 400
