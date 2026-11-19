@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atende-ai"
+version = "0.1.0"
+description = "Plataforma de conhecimento e atendimento com IA para pequenos negócios"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.165,<1",
+    "uvicorn>=0.54,<1",
+    "httpx>=0.28,<1",
+    "mcp>=2.3,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9,<10",
+    "ruff>=0.17,<1",
+]
+
+# Um pacote por serviço, cada um dentro da sua pasta em services/.
+[tool.setuptools.packages.find]
+where = ["services/core-api", "services/mcp-server", "services/agent"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["services", "tests"]
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
