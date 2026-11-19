@@ -25,6 +25,7 @@ ANTHROPIC_API_KEY=sua-chave
 |---|---|---|
 | `LLM_PROVIDER` | `fake` | `fake` (sem chave) ou `anthropic` |
 | `LLM_MODEL` | `claude-opus-5-5` | Modelo do Claude, quando `LLM_PROVIDER=anthropic` |
+| `SCORE_MINIMO` | `0.1` | Trechos com score abaixo disso são ignorados. Depende do modelo de embedding: reajuste ao trocar |
 | `MCP_SERVER_URL` | `http://localhost:8001/mcp` | Onde está o servidor MCP |
 | `CORE_API_URL` | `http://localhost:8000` | Onde está o core-api (só o `ingest` usa) |
 
@@ -40,5 +41,7 @@ Dois caminhos diferentes, de propósito:
 
 - **`ask` passa pelo servidor MCP**, como qualquer agente. Por ali só existe conteúdo público.
 - **`ingest` fala direto com o core-api.** Enviar documento é tarefa de quem administra o acervo, não do agente que conversa com o público, então não existe ferramenta MCP para isso.
+
+O CLI lê do `.env` só as variáveis desta tabela e `ANTHROPIC_API_KEY`.
 
 Testes: `pytest services/agent` (servidor MCP simulado, sem rede).

@@ -1,11 +1,13 @@
 """Aplicação HTTP do núcleo. Rode com: uvicorn core_api.main:criar_app --factory"""
 
 import logging
+import os
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from core_api.acervo import Acervo, DocumentoVazio
 from core_api.config import montar_acervo
@@ -42,6 +44,10 @@ def criar_app(acervo: Acervo | None = None) -> FastAPI:
     """Sem argumento, monta o acervo a partir das variáveis de ambiente (ver config.py)."""
     acervo = acervo or montar_acervo()
     app = FastAPI(title="atende-ai core-api")
+    # Recusa requisição com Host desconhecido. Sem isso, uma página maliciosa aberta no
+    # navegador de quem roda o sistema poderia alcançar esta API (ataque de DNS rebinding).
+    hosts = os.environ.get("CORE_API_HOSTS") or "localhost,127.0.0.1,core-api"
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts.split(","))
 
     @app.exception_handler(AcervoIndisponivel)
     def indisponivel(_: Request, erro: AcervoIndisponivel) -> JSONResponse:

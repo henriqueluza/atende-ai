@@ -8,6 +8,8 @@ from mcp import Client
 from agent.llm import LLM, SEM_RESPOSTA, Fonte
 
 # Abaixo disso o trecho quase não tem relação com a pergunta e só atrapalharia a resposta.
+# O valor certo depende do modelo de embedding: 0.1 foi ajustado para o embedder falso.
+# Ao trocar de modelo, ajuste pela variável SCORE_MINIMO (ver cli.py).
 SCORE_MINIMO = 0.1
 
 Buscar = Callable[[str, int], Awaitable[list[Fonte]]]
@@ -23,8 +25,10 @@ class Resposta:
     fontes: list[Fonte]
 
 
-async def responder(pergunta: str, buscar: Buscar, llm: LLM, k: int = 3) -> Resposta:
-    fontes = [fonte for fonte in await buscar(pergunta, k) if fonte.score >= SCORE_MINIMO]
+async def responder(
+    pergunta: str, buscar: Buscar, llm: LLM, k: int = 3, score_minimo: float = SCORE_MINIMO
+) -> Resposta:
+    fontes = [fonte for fonte in await buscar(pergunta, k) if fonte.score >= score_minimo]
     if not fontes:
         # Sem trecho relevante, nem chama o modelo: melhor dizer que não sabe do que inventar.
         return Resposta(SEM_RESPOSTA, [])
@@ -43,7 +47,10 @@ def busca_por_mcp(servidor) -> Buscar:
                 argumentos = {"pergunta": pergunta, "k": k}
                 resultado = await cliente.call_tool("buscar_conhecimento", argumentos)
         except Exception as erro:  # o cliente MCP agrupa falhas de rede de formas variadas
-            raise ErroDeBusca("Não consegui falar com o servidor MCP. Ele está no ar?") from erro
+            causa = type(erro).__name__  # ajuda a separar "fora do ar" de defeito no código
+            raise ErroDeBusca(
+                f"Não consegui falar com o servidor MCP ({causa}). Ele está no ar?"
+            ) from erro
         if resultado.is_error:
             mensagens = [bloco.text for bloco in resultado.content if hasattr(bloco, "text")]
             raise ErroDeBusca(" ".join(mensagens) or "A busca falhou.")

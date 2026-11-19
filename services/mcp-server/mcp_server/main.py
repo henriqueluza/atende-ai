@@ -55,8 +55,10 @@ def criar_servidor(core_api: httpx.AsyncClient) -> MCPServer:
             resposta.raise_for_status()
             return RespostaBusca.model_validate(resposta.json())
         except (httpx.HTTPError, ValidationError, ValueError) as erro:
-            # O detalhe fica no log; o agente recebe só uma mensagem genérica.
-            log.error("Falha ao consultar o core-api: %r", erro)
+            # O agente recebe só uma mensagem genérica. O log leva o tipo do erro e o status,
+            # sem a URL: ela contém a pergunta do cliente, que é dado pessoal.
+            status = getattr(getattr(erro, "response", None), "status_code", None)
+            log.error("Falha ao consultar o core-api: %s (status %s)", type(erro).__name__, status)
             raise ToolError("O acervo está indisponível no momento.") from None
 
     @servidor.custom_route("/health", methods=["GET"])

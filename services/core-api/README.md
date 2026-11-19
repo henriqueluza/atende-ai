@@ -39,6 +39,7 @@ curl 'localhost:8000/busca?pergunta=horario&k=3'
 | Variável | Padrão | Para que serve |
 |---|---|---|
 | `DATABASE_URL` | vazio (memória) | Endereço do Postgres. No `docker compose` já vem preenchido |
+| `CORE_API_HOSTS` | `localhost,127.0.0.1,core-api` | Valores de `Host` aceitos. Requisição com outro `Host` recebe 400 |
 | `EMBEDDINGS_PROVIDER` | `fake` | `fake` (sem chave) ou `openai` (qualquer serviço no formato da OpenAI) |
 | `EMBEDDINGS_DIM` | `1024` | Tamanho do vetor. Tem que bater com o modelo. Mudar exige recriar o banco |
 | `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_MODEL`, `EMBEDDINGS_API_KEY` | vazio | Só para `openai` |

@@ -34,7 +34,7 @@ def test_embedder_real_chama_o_endpoint_e_devolve_os_vetores_na_ordem():
 )
 def test_falha_do_servico_de_embeddings_vira_503_sem_vazar_detalhe(resposta):
     acervo = Acervo(RepositorioMemoria(), _embedder(lambda _: resposta))
-    api = TestClient(criar_app(acervo))
+    api = TestClient(criar_app(acervo), base_url="http://localhost")
 
     busca = api.get("/busca", params={"pergunta": "oi"})
 
