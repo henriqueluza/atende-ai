@@ -9,7 +9,7 @@ A busca não devolve o documento inteiro, e sim pedaços dele ("trechos"). O tam
 
 ## Decisão
 
-Um trecho novo começa a cada título markdown (linha que começa com `#`) ou quando o trecho passaria de **800 caracteres**. Parágrafos não são cortados no meio, exceto quando um parágrafo sozinho passa do limite. Não há sobreposição entre trechos.
+Um trecho novo começa a cada título markdown (linha que começa com `#`) ou quando o trecho passaria de **800 caracteres**. Parágrafos não são cortados no meio, exceto quando um parágrafo sozinho passa do limite (aí o corte é num espaço). Um título nunca fica sozinho num trecho se houver texto depois dele. Não há sobreposição entre trechos.
 
 O código está em `services/core-api/core_api/chunking.py`.
 
