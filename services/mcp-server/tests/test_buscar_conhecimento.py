@@ -100,12 +100,14 @@ def _fora_do_ar(_: httpx.Request) -> httpx.Response:
         lambda _: httpx.Response(200, text="isto não é JSON"),
     ],
 )
-async def test_falha_do_nucleo_vira_erro_generico_sem_detalhe_interno(responder):
+async def test_falha_do_nucleo_vira_erro_generico_sem_detalhe_interno(responder, caplog):
     async with Client(_servidor(responder)) as cliente:
-        resposta = await cliente.call_tool("buscar_conhecimento", {"pergunta": "horário?"})
+        resposta = await cliente.call_tool("buscar_conhecimento", {"pergunta": "meu cpf 123"})
 
     [conteudo] = resposta.content
     assert resposta.is_error is True
     assert "O acervo está indisponível no momento." in conteudo.text
     assert "core-api.test" not in conteudo.text
     assert "senha" not in conteudo.text
+    assert "Falha ao consultar o core-api" in caplog.text
+    assert "cpf" not in caplog.text  # a pergunta do cliente não vai para o log
