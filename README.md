@@ -39,4 +39,4 @@ Leia o [CONTRIBUTING.md](CONTRIBUTING.md) antes do primeiro PR. Resumo: ninguém
 | ML e extração | a definir | a definir |
 | MCP | a definir | a definir |
 | Agente | a definir | a definir |
-| Plataforma (CI, infra, avaliação) | a definir | a definir |
+| Plataforma (CI, infra, avaliação) | @neozmmv | a definir |
