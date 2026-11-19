@@ -1,14 +1,17 @@
-"""Aplicação HTTP do núcleo. Rode com: uvicorn core_api.main:app"""
+"""Aplicação HTTP do núcleo. Rode com: uvicorn core_api.main:criar_app --factory"""
 
+import logging
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from core_api.acervo import Acervo, DocumentoVazio
-from core_api.dominio import Visibilidade
-from core_api.embeddings import EmbedderFalso
-from core_api.repositorio_memoria import RepositorioMemoria
+from core_api.config import montar_acervo
+from core_api.dominio import AcervoIndisponivel, Visibilidade
+
+log = logging.getLogger("core_api")
 
 
 class NovoDocumento(BaseModel):
@@ -36,8 +39,15 @@ class RespostaBusca(BaseModel):
 
 
 def criar_app(acervo: Acervo | None = None) -> FastAPI:
-    acervo = acervo or Acervo(RepositorioMemoria(), EmbedderFalso())
+    """Sem argumento, monta o acervo a partir das variáveis de ambiente (ver config.py)."""
+    acervo = acervo or montar_acervo()
     app = FastAPI(title="atende-ai core-api")
+
+    @app.exception_handler(AcervoIndisponivel)
+    def indisponivel(_: Request, erro: AcervoIndisponivel) -> JSONResponse:
+        # O detalhe fica no log. Para fora vai só uma mensagem genérica.
+        log.error("Dependência fora do ar: %s", erro, exc_info=erro)
+        return JSONResponse({"detail": "Serviço temporariamente indisponível."}, status_code=503)
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -72,6 +82,3 @@ def criar_app(acervo: Acervo | None = None) -> FastAPI:
         )
 
     return app
-
-
-app = criar_app()

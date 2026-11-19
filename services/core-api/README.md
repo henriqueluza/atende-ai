@@ -29,7 +29,27 @@ curl 'localhost:8000/busca?pergunta=horario&k=3'
 | `acervo.py` | Os dois casos de uso: ingerir e buscar |
 | `chunking.py` | Divisão do texto em trechos ([ADR 0002](../../docs/adr/0002-chunking.md)) |
 | `embeddings.py` | Texto em vetor ([ADR 0003](../../docs/adr/0003-embeddings.md)) |
-| `repositorio_memoria.py` | Armazenamento em memória, usado nos testes |
+| `repositorio_memoria.py` | Armazenamento em memória, usado nos testes e quando não há `DATABASE_URL` |
+| `repositorio_postgres.py` | Armazenamento em Postgres + pgvector. O filtro de visibilidade está no SQL |
+| `config.py` | Lê as variáveis de ambiente e escolhe repositório e embedder |
 | `main.py` | Rotas HTTP e validação da entrada |
 
-Testes: `pytest services/core-api`.
+## Configuração
+
+| Variável | Padrão | Para que serve |
+|---|---|---|
+| `DATABASE_URL` | vazio (memória) | Endereço do Postgres. No `docker compose` já vem preenchido |
+| `EMBEDDINGS_PROVIDER` | `fake` | `fake` (sem chave) ou `openai` (qualquer serviço no formato da OpenAI) |
+| `EMBEDDINGS_DIM` | `256` | Tamanho do vetor. Tem que bater com o modelo. Mudar exige recriar o banco |
+| `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_MODEL`, `EMBEDDINGS_API_KEY` | vazio | Só para `openai` |
+
+Configuração inválida impede o serviço de iniciar, com a mensagem do que falta.
+
+## Testes
+
+```bash
+pytest services/core-api                 # em memória; os testes de Postgres são pulados
+DATABASE_URL_TESTE=postgresql://USUARIO:SENHA@localhost:5432/atende_teste pytest services/core-api
+```
+
+O banco de teste é separado do banco de desenvolvimento porque os testes apagam as tabelas. Para criar: `docker compose exec db createdb -U atende atende_teste`. No CI ele já existe.

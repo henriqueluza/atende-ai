@@ -1,4 +1,5 @@
 import pytest
+from core_api.config import montar_acervo
 from core_api.main import criar_app
 from fastapi.testclient import TestClient
 
@@ -8,7 +9,7 @@ SIGILOSO = "## Horário de funcionamento da diretoria\n\nMargem de lucro secreta
 
 @pytest.fixture
 def api():
-    return TestClient(criar_app())
+    return TestClient(criar_app(montar_acervo({})))  # em memória, embedder falso
 
 
 def _ingerir(api, nome, conteudo, visibilidade):

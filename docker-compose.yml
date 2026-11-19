@@ -29,7 +29,17 @@ services:
 
   core-api:
     <<: *servico-python
-    command: uvicorn core_api.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn core_api.main:criar_app --factory --host 0.0.0.0 --port 8000
+    environment:
+      # Usuário e senha vão separados (PGUSER/PGPASSWORD) para não quebrar com caractere especial.
+      DATABASE_URL: postgresql://db:5432/${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-fake}
+      EMBEDDINGS_DIM: ${EMBEDDINGS_DIM:-256}
+      EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-https://api.openai.com/v1}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-}
+      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
     ports:
       - "127.0.0.1:${CORE_API_PORT:-8000}:8000"
     depends_on:
