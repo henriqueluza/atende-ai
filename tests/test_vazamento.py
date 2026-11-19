@@ -69,6 +69,8 @@ async def test_pedir_interno_direto_na_ferramenta_mcp_nao_tem_efeito(sistema):
     async with Client(sistema.mcp) as cliente:
         resultado = await cliente.call_tool("buscar_conhecimento", argumentos)
 
+    # O argumento a mais é ignorado: a chamada funciona e não traz nada do documento interno.
+    assert resultado.is_error is False
     assert resultado.structured_content == {"resultados": []}
 
 

@@ -41,4 +41,5 @@ def sistema(request) -> Sistema:
         transport=httpx.ASGITransport(app=app), base_url="http://core-api"
     )
     mcp = criar_servidor(para_o_core_api)
-    return Sistema(core_api=TestClient(app), mcp=mcp, buscar=busca_por_mcp(mcp))
+    core_api = TestClient(app, base_url="http://localhost")
+    return Sistema(core_api=core_api, mcp=mcp, buscar=busca_por_mcp(mcp))

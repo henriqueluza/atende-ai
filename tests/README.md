@@ -15,4 +15,6 @@ DATABASE_URL_TESTE=postgresql://USUARIO:SENHA@localhost:5432/atende_teste pytest
 
 No CI os dois modos rodam sempre.
 
+O que estes testes **não** cobrem: a rede de verdade entre os serviços (HTTP e o transporte Streamable HTTP do MCP) e o `docker compose up`. Isso é verificado à mão, com os comandos de "Como rodar" do README da raiz.
+
 **Se o `test_vazamento.py` falhar, não ajuste o teste para passar.** Ele existe para avisar que um documento sigiloso pode chegar a um cliente.
