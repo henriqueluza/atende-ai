@@ -75,3 +75,11 @@ async def test_resposta_fora_do_contrato_vira_erro_de_busca():
 
     with pytest.raises(ErroDeBusca, match="fora do contrato"):
         await responder("Qual o horário?", buscar, LLMFalso())
+
+
+async def test_score_minimo_e_ajustavel_para_outros_modelos_de_embedding():
+    buscar = busca_por_mcp(_mcp_simulado([HORARIO]))  # score 0.7
+
+    exigente = await responder("Qual o horário?", buscar, LLMFalso(), score_minimo=0.8)
+
+    assert exigente.texto == SEM_RESPOSTA
