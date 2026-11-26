@@ -13,11 +13,13 @@ O sistema tem duas metades ligadas por um contrato MCP:
 services/
   core-api/      núcleo: ingestão, extração, RAG
   mcp-server/    ferramentas expostas para agentes
-  agent/         agente (no terminal na Etapa 1; WhatsApp na Etapa 3)
+  agent/         agente (terminal e serviço HTTP; WhatsApp na Etapa 3)
+apps/
+  desktop/       aplicativo de desktop para quem administra o acervo (Electron)
 exemplos/        documentos de exemplo para ingerir
 tests/           testes de integração entre os serviços
 pipelines/       orquestração e jobs de dados
-ml/              treino, avaliação, modelos
+ml/              avaliação da busca (perguntas de teste e mínimos do CI)
 infra/           Docker e configuração de deploy
 docs/
   adr/           decisões de arquitetura
@@ -29,7 +31,7 @@ docs/
 | Etapa | O que entrega | Estado |
 |---|---|---|
 | 1. Esqueleto de ponta a ponta e contrato MCP | Documento entra, é indexado, e um agente no terminal responde citando a fonte | Implementada, aguardando revisão dos PRs (#10 a #18) |
-| 2. Aprofundar o núcleo de conhecimento | PDF e OCR, pipeline de ingestão, busca híbrida, avaliação no CI | Não iniciada |
+| 2. Aprofundar o núcleo de conhecimento | PDF e OCR, pipeline de ingestão, busca híbrida, avaliação no CI, aplicativo de desktop | Implementada, aguardando revisão |
 | 3. Agente no WhatsApp respondendo dúvidas | WhatsApp, histórico de conversa, transferência para humano, LGPD | Não iniciada |
 | 4. Ações e documentos pela conversa | Agenda e pagamento por MCP, documentos enviados pelo cliente | Não iniciada |
 
@@ -39,7 +41,7 @@ Pré-requisitos: Docker (com Docker Compose) e Python 3.12.
 
 ```bash
 cp .env.example .env                 # funciona sem nenhuma chave de API
-docker compose up -d --wait          # sobe banco, core-api e mcp-server
+docker compose up -d --wait          # sobe banco, core-api, mcp-server e o atendente
 
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"              # instala o agente e as ferramentas de teste
@@ -60,6 +62,15 @@ Fontes:
       Abrimos de terça a sábado, das 9h às 19h. Fechamos aos domingos, segundas e feriados.
 ```
 
+PDF e imagem também entram, por uma fila. O comando volta na hora e o documento aparece na busca alguns segundos depois:
+
+```bash
+python -m agent.cli ingest tabela-de-precos.pdf --visibilidade publico
+curl -s localhost:8000/documentos        # mostra a situação: na_fila, extraindo, indexado ou falhou
+```
+
+Quem administra o acervo usa o aplicativo de desktop: `cd apps/desktop && npm ci && npm start` ([como rodar](apps/desktop/README.md)).
+
 Para ver a regra de visibilidade funcionando, envie o documento interno de exemplo e pergunte por algo que só ele tem. O agente responde que não encontrou:
 
 ```bash
@@ -76,13 +87,15 @@ Todas ficam no `.env` (que nunca vai para o Git). Os padrões do `.env.example` 
 | Variável | Padrão | Para que serve |
 |---|---|---|
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | ver `.env.example` | Banco local. Troque a senha |
-| `DB_PORT`, `CORE_API_PORT`, `MCP_SERVER_PORT` | `5432`, `8000`, `8001` | Portas na sua máquina (só em `127.0.0.1`) |
+| `DB_PORT`, `CORE_API_PORT`, `MCP_SERVER_PORT`, `AGENT_PORT` | `5432`, `8000`, `8001`, `8002` | Portas na sua máquina (só em `127.0.0.1`) |
+| `OCR_PROVIDER`, `OCR_IDIOMA` | `tesseract`, `por` | Leitura de imagem e PDF escaneado. `nenhum` desliga |
+| `BUSCA_MODO`, `BUSCA_PESO_SEMANTICO` | `hibrida`, `0.5` | Modo padrão da busca e quanto vale o embedding na híbrida |
 | `EMBEDDINGS_PROVIDER` | `fake` | `fake` (sem chave) ou `openai` (serviço no formato da API da OpenAI) |
 | `EMBEDDINGS_DIM` | `1024` | Tamanho do vetor. Mudar exige recriar o banco: `docker compose down -v` |
 | `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_MODEL`, `EMBEDDINGS_API_KEY` | vazio | Só para `EMBEDDINGS_PROVIDER=openai` |
 | `LLM_PROVIDER` | `fake` | `fake` (sem chave) ou `anthropic` (Claude redige a resposta) |
 | `LLM_MODEL`, `ANTHROPIC_API_KEY` | `claude-opus-5-5`, vazio | Só para `LLM_PROVIDER=anthropic` |
-| `SCORE_MINIMO` | `0.1` | Trechos com score abaixo disso são ignorados pelo agente. Depende do modelo de embedding |
+| `SCORE_MINIMO` | `0.2` | Trechos com score abaixo disso são ignorados pelo agente. Depende do modelo de embedding |
 | `CORE_API_HOSTS` | `localhost,127.0.0.1,core-api` | Valores de `Host` que o core-api aceita |
 | `CORE_API_URL`, `MCP_SERVER_URL` | `http://localhost:8000`, `http://localhost:8001/mcp` | Para onde o agente aponta |
 
@@ -91,6 +104,7 @@ Todas ficam no `.env` (que nunca vai para o Git). Os padrões do `.env.example` 
 ```bash
 ruff check .
 pytest                               # tudo em memória; os testes de Postgres são pulados
+python ml/avaliacao/rodar.py         # mede a busca e reprova se ela piorar
 
 # Para rodar também contra o Postgres (o CI sempre roda):
 docker compose exec db createdb -U atende atende_teste
@@ -99,43 +113,89 @@ DATABASE_URL_TESTE=postgresql://atende:SUA_SENHA@localhost:5432/atende_teste pyt
 
 ## Arquitetura atual
 
-O que existe de fato ao fim da Etapa 1:
+O que existe de fato ao fim da Etapa 2:
 
 ```mermaid
 flowchart LR
+    dono([Quem administra o acervo])
     pessoa([Pessoa no terminal])
 
     subgraph maquina["Na sua máquina"]
-        cli["agent<br/>CLI ingest / ask"]
-        llm["LLM<br/>falso (padrão) ou Claude"]
+        app["aplicativo de desktop<br/>Electron"]
+        cli["agent CLI<br/>ingest / ask / avaliar"]
     end
 
     subgraph docker["docker compose"]
+        agente["agent<br/>POST /perguntas"]
+        llm["LLM<br/>falso (padrão) ou Claude"]
         mcp["mcp-server<br/>buscar_conhecimento(pergunta, k)"]
-        core["core-api<br/>POST /documentos · GET /busca"]
-        db[("Postgres + pgvector<br/>documentos e trechos")]
+        core["core-api<br/>documentos · busca · avaliação"]
+        fila["fila de ingestão<br/>PDF, OCR, chunking, embeddings"]
+        db[("Postgres + pgvector<br/>documentos, trechos, arquivos")]
     end
 
+    dono --> app
     pessoa --> cli
-    cli -- "ask: contrato MCP<br/>(só conteúdo público)" --> mcp
+    app -- "administra o acervo<br/>(inclui internos)" --> core
+    app -- "testar atendente" --> agente
+    cli -- "ingest, avaliar" --> core
+    cli -- "ask" --> mcp
+    agente -- "contrato MCP<br/>(só conteúdo público)" --> mcp
+    agente --> llm
     mcp -- "HTTP, sempre com<br/>visibilidade=publico" --> core
-    cli -- "ingest: HTTP direto" --> core
-    core -- "chunking + embeddings<br/>filtro de visibilidade no SQL" --> db
-    cli --> llm
+    core --> db
+    core -. "arquivo na fila" .-> fila
+    fila --> db
 ```
 
 Como ler o desenho:
 
-- **Uma pergunta (`ask`)** sai do agente, passa pelo servidor MCP e chega ao core-api. O servidor MCP é a única porta do agente para o acervo, e por ela só passa conteúdo `publico`.
-- **Um documento (`ingest`)** vai direto ao core-api. Enviar documento é tarefa de quem administra o acervo, então não existe ferramenta MCP para isso.
-- **O core-api** divide o texto em trechos, transforma cada trecho num vetor (embedding) e guarda no Postgres. Na busca, compara o vetor da pergunta com os dos trechos.
+- **Uma pergunta de cliente** (pelo `ask` ou pelo serviço `agent`) passa pelo servidor MCP e chega ao core-api. O servidor MCP é a única porta do atendente para o acervo, e por ela só passa conteúdo `publico`.
+- **Administrar o acervo** (enviar, listar, excluir, pesquisar em documentos internos, avaliar) é falar direto com o core-api. Não existe ferramenta MCP para isso.
+- **Texto e markdown** são indexados na hora. **PDF e imagem** entram na fila: uma thread do core-api lê o texto (com OCR quando é foto), divide em trechos e gera os embeddings.
+- **A busca** soma duas notas: a semelhança do embedding e a fração das palavras da pergunta presentes no trecho.
 - **O LLM** só redige a resposta a partir dos trechos que a busca devolveu. As fontes mostradas vêm da busca, não do texto do modelo.
 
 A regra de visibilidade tem três travas independentes, e há teste para cada uma: a ferramenta MCP não tem parâmetro de visibilidade, o servidor MCP fixa `publico` em toda consulta, e o core-api assume `publico` quando ninguém informa.
 
-Cada serviço tem um README com mais detalhe: [core-api](services/core-api/README.md), [mcp-server](services/mcp-server/README.md) (o contrato), [agent](services/agent/README.md), [infra](infra/README.md), [tests](tests/README.md).
+Cada parte tem um README com mais detalhe: [core-api](services/core-api/README.md), [mcp-server](services/mcp-server/README.md) (o contrato), [agent](services/agent/README.md), [desktop](apps/desktop/README.md), [ml](ml/README.md), [infra](infra/README.md), [tests](tests/README.md).
 
 ## Registro de mudanças
+
+### Etapa 2: núcleo de conhecimento e aplicativo de desktop (2026-11-23)
+
+**O que foi feito**
+- PDF e imagem: `POST /documentos/arquivo` recebe PDF, PNG, JPG e WEBP. Página com texto é lida direto; página escaneada e imagem passam por OCR (Tesseract em português).
+- Fila de ingestão: o arquivo entra como `na_fila`, uma thread do core-api lê e indexa, e a lista mostra o andamento ("Lendo a página 2 de 3") ou o motivo da falha.
+- Busca híbrida: `GET /busca?modo=hibrida|semantica|palavras`. A híbrida é o padrão. Busca por palavras em português, sem diferenciar acento, e índice aproximado (HNSW) para os vetores.
+- Avaliação no CI: 30 perguntas de cliente sobre `exemplos/`; o PR é reprovado se a busca piorar. O servidor guarda as execuções em `POST /avaliacao/execucoes`.
+- Administração do acervo: `GET /documentos`, `GET /documentos/{id}` (trechos e etapas), `PATCH /documentos/{id}` (visibilidade) e `DELETE /documentos/{id}`.
+- Atendente por HTTP: serviço `agent` no docker compose (`POST /perguntas`), o mesmo fluxo do `ask`.
+- Aplicativo de desktop em `apps/desktop` (Electron + React): Documentos, Documento, Pesquisa, Testar atendente, Qualidade da busca e Configurações. Como rodar: [apps/desktop](apps/desktop/README.md).
+- Linha de comando: `ingest` aceita PDF e imagem; novo comando `avaliar`.
+
+**Decisões**
+- pypdfium2 + Tesseract, com o arquivo tratado como não confiável: [ADR 0005](docs/adr/0005-extracao-de-pdf-e-ocr.md).
+- Fila na própria tabela de documentos, processada por uma thread do core-api: [ADR 0006](docs/adr/0006-fila-de-ingestao.md).
+- Nota híbrida = metade embedding, metade cobertura de palavras; corte do atendente em 0,2: [ADR 0007](docs/adr/0007-busca-hibrida.md).
+- Avaliação por documento esperado, com mínimos no CI: [ADR 0008](docs/adr/0008-avaliacao-da-busca.md).
+- Aplicativo em Electron, com a tela isolada e toda a rede no processo principal. Direção visual: [docs/design/atende-ai.md](docs/design/atende-ai.md).
+
+**Como verificar**
+- `pytest` e `python ml/avaliacao/rodar.py`.
+- Com o sistema no ar: `python -m agent.cli ingest um-arquivo.pdf --visibilidade publico`, esperar alguns segundos e perguntar por algo que só o PDF tem.
+- `cd apps/desktop && npm ci && npm start`: arrastar um PDF para a janela, acompanhar a situação e pesquisar.
+- Verificado à mão no docker compose completo: PDF com texto, PDF escaneado de duas páginas e foto JPG com acentos foram lidos; PDF corrompido ficou como "Falhou"; conteúdo interno não chegou ao atendente.
+
+**Limitações conhecidas / próximo passo**
+- **A busca foi medida só com o embedder falso.** A escolha de um modelo real de embedding continua pendente (precisa de chave). Ao escolher, medir de novo e reajustar peso e corte.
+- Com o embedder falso, "Que horas vocês abrem?" ainda traz primeiro o trecho errado (o certo vem entre os três primeiros).
+- O OCR não foi medido em foto de celular nem em letra de mão. Tabela em PDF vira texto corrido.
+- Falha no processamento não é tentada de novo sozinha, e trocar de modelo de embedding ainda exige reenviar os documentos.
+- **Continua sem autenticação** em todos os serviços, com as portas presas em `127.0.0.1`.
+- O chunking continua o da Etapa 1 (agora há como medir uma mudança nele).
+- O aplicativo não tem instalador, e as perguntas de avaliação são enviadas pela linha de comando, não pelo aplicativo.
+- As dependências Python seguem sem arquivo de lock.
 
 ### Etapa 1: esqueleto de ponta a ponta e contrato MCP (2026-11-18)
 

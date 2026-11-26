@@ -10,6 +10,12 @@ venv/
 dist/
 build/
 
+# Node (apps/desktop)
+node_modules/
+
+# Rascunhos das ferramentas de design
+.taste-skill/
+
 # Segredos e configuração local
 .env
 .env.*
