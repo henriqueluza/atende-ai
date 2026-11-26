@@ -71,5 +71,26 @@ services:
       timeout: 3s
       retries: 10
 
+  # O atendente por HTTP: é o que o aplicativo de desktop usa em "Testar atendente".
+  agent:
+    <<: *servico-python
+    command: uvicorn agent.servico:criar_app --factory --host 0.0.0.0 --port 8002
+    environment:
+      MCP_SERVER_URL: http://mcp-server:8001/mcp
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      LLM_MODEL: ${LLM_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SCORE_MINIMO: ${SCORE_MINIMO:-}
+    ports:
+      - "127.0.0.1:${AGENT_PORT:-8002}:8002"
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   dados-db:
