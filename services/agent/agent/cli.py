@@ -2,10 +2,12 @@
 
 python -m agent.cli ingest exemplos/faq-salao.md --visibilidade publico
 python -m agent.cli ask "Qual o horário de funcionamento?"
+python -m agent.cli avaliar ml/avaliacao/perguntas.jsonl --nota "Busca híbrida"
 """
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -22,6 +24,8 @@ def main(argumentos: list[str] | None = None) -> int:
     try:
         if opcoes.comando == "ingest":
             print(ingerir(Path(opcoes.arquivo), opcoes.visibilidade, _core_api()))
+        elif opcoes.comando == "avaliar":
+            print(avaliar(Path(opcoes.arquivo), opcoes.versao, opcoes.nota, _core_api()))
         else:
             buscar = busca_por_mcp(os.environ.get("MCP_SERVER_URL") or "http://localhost:8001/mcp")
             minimo = float(os.environ.get("SCORE_MINIMO") or SCORE_MINIMO)
@@ -74,6 +78,21 @@ def _enviar_arquivo(arquivo: Path, visibilidade: str, core_api: httpx.Client) ->
     return (
         f"Arquivo {dados['nome']} recebido como {dados['visibilidade']} e colocado na fila. "
         "Ele entra na busca quando o processamento terminar."
+    )
+
+
+def avaliar(arquivo: Path, versao: str, nota: str | None, core_api: httpx.Client) -> str:
+    """Envia o conjunto de perguntas (uma por linha, em JSON) e mostra o resultado."""
+    try:
+        linhas = arquivo.read_text(encoding="utf-8").splitlines()
+        perguntas = [json.loads(linha) for linha in linhas if linha.strip()]
+    except (OSError, UnicodeDecodeError, ValueError) as erro:
+        raise ErroDeUso(f"Não consegui ler {arquivo} como JSON, uma pergunta por linha.") from erro
+    corpo = {"perguntas": perguntas, "versao": versao, "nota": nota}
+    dados = _pedir(core_api, "POST", "/avaliacao/execucoes", 201, "a avaliação", json=corpo)
+    return (
+        f"{dados['acertos']} de {dados['perguntas']} perguntas trouxeram o documento certo "
+        f"(busca {dados['modo']}, MRR {dados['mrr']:.2f})."
     )
 
 
@@ -160,6 +179,10 @@ def _ler_argumentos(argumentos: list[str] | None) -> argparse.Namespace:
     )
     ingest.add_argument("arquivo")
     ingest.add_argument("--visibilidade", required=True, choices=["publico", "interno"])
+    avalia = comandos.add_parser("avaliar", help="mede a busca com um conjunto de perguntas")
+    avalia.add_argument("arquivo")
+    avalia.add_argument("--versao", default="", help="identifica a execução (ex.: o commit)")
+    avalia.add_argument("--nota", default=None, help="o que mudou desde a última execução")
     ask = comandos.add_parser("ask", help="faz uma pergunta ao acervo público")
     ask.add_argument("pergunta")
     ask.add_argument(

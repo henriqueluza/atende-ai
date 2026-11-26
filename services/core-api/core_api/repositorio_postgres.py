@@ -1,8 +1,10 @@
 """Repositório em Postgres + pgvector. O filtro de visibilidade fica dentro do SQL."""
 
+import json
 import math
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import psycopg
 from psycopg import sql
@@ -56,6 +58,11 @@ _ESQUEMA = [
     """CREATE TABLE IF NOT EXISTS arquivos (
         documento_id uuid PRIMARY KEY REFERENCES documentos (id) ON DELETE CASCADE,
         conteudo bytea NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS avaliacoes (
+        id bigserial PRIMARY KEY,
+        criado_em timestamptz NOT NULL DEFAULT now(),
+        dados jsonb NOT NULL
     )""",
 ]
 
@@ -281,6 +288,17 @@ class RepositorioPostgres:
                 "UPDATE documentos SET situacao = 'na_fila', andamento = NULL "
                 "WHERE situacao IN ('extraindo', 'indexando')"
             ).rowcount
+
+    def guardar_avaliacao(self, dados: dict[str, Any]) -> None:
+        with self._conexao() as conexao:
+            conexao.execute(
+                "INSERT INTO avaliacoes (dados) VALUES (%s::jsonb)", (json.dumps(dados),)
+            )
+
+    def avaliacoes(self) -> list[dict[str, Any]]:
+        with self._conexao() as conexao:
+            linhas = conexao.execute("SELECT dados FROM avaliacoes ORDER BY id").fetchall()
+        return [dados for (dados,) in linhas]
 
     @staticmethod
     def _inserir(conexao: psycopg.Connection, documento: Documento, situacao: Situacao) -> None:
