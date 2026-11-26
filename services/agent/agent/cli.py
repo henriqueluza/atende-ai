@@ -37,28 +37,60 @@ class ErroDeUso(Exception):
     """Problema que a pessoa resolve: arquivo, configuração ou serviço fora do ar."""
 
 
+# Estes formatos passam pela fila do core-api, que lê o texto (com OCR quando é imagem).
+FORMATOS_DE_ARQUIVO = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+
+
 def ingerir(arquivo: Path, visibilidade: str, core_api: httpx.Client) -> str:
+    if arquivo.suffix.lower() in FORMATOS_DE_ARQUIVO:
+        return _enviar_arquivo(arquivo, visibilidade, core_api)
     try:
         conteudo = arquivo.read_text(encoding="utf-8-sig")  # aceita arquivo com BOM
     except (OSError, UnicodeDecodeError) as erro:
         raise ErroDeUso(f"Não consegui ler {arquivo} como texto UTF-8.") from erro
     corpo = {"nome": arquivo.name, "conteudo": conteudo, "visibilidade": visibilidade}
+    dados = _pedir(core_api, "POST", "/documentos", 201, "o documento", json=corpo)
+    return (
+        f"Documento {dados['nome']} indexado como {dados['visibilidade']}: "
+        f"{dados['trechos']} trecho(s)."
+    )
+
+
+def _enviar_arquivo(arquivo: Path, visibilidade: str, core_api: httpx.Client) -> str:
     try:
-        resposta = core_api.post("/documentos", json=corpo)
+        conteudo = arquivo.read_bytes()
+    except OSError as erro:
+        raise ErroDeUso(f"Não consegui ler {arquivo}.") from erro
+    parametros = {"nome": arquivo.name, "visibilidade": visibilidade}
+    dados = _pedir(
+        core_api,
+        "POST",
+        "/documentos/arquivo",
+        202,
+        "o arquivo",
+        params=parametros,
+        content=conteudo,
+    )
+    return (
+        f"Arquivo {dados['nome']} recebido como {dados['visibilidade']} e colocado na fila. "
+        "Ele entra na busca quando o processamento terminar."
+    )
+
+
+def _pedir(core_api: httpx.Client, metodo: str, caminho: str, esperado: int, o_que: str, **kw):
+    try:
+        resposta = core_api.request(metodo, caminho, **kw)
     except httpx.HTTPError as erro:
         raise ErroDeUso("Não consegui falar com o core-api. Rodou docker compose up?") from erro
     try:
         dados = resposta.json()
     except ValueError:
         dados = {}
-    if resposta.status_code != 201 or not isinstance(dados, dict):
+    if resposta.status_code != esperado or not isinstance(dados, dict):
         detalhe = dados.get("detail") if isinstance(dados, dict) else None
         motivo = f": {detalhe}" if isinstance(detalhe, str) else "."
-        raise ErroDeUso(f"O core-api recusou o documento (HTTP {resposta.status_code}){motivo}")
-    return (
-        f"Documento {dados['nome']} indexado como {dados['visibilidade']}: "
-        f"{dados['trechos']} trecho(s)."
-    )
+        raise ErroDeUso(f"O core-api recusou {o_que} (HTTP {resposta.status_code}){motivo}")
+    return dados
 
 
 def escolher_llm(ambiente: dict[str, str] | None = None) -> LLM:
@@ -123,7 +155,9 @@ def _core_api() -> httpx.Client:
 def _ler_argumentos(argumentos: list[str] | None) -> argparse.Namespace:
     leitor = argparse.ArgumentParser(prog="python -m agent.cli", description="Agente do atende-ai")
     comandos = leitor.add_subparsers(dest="comando", required=True)
-    ingest = comandos.add_parser("ingest", help="envia um documento de texto ou markdown ao acervo")
+    ingest = comandos.add_parser(
+        "ingest", help="envia um documento ao acervo (texto, markdown, PDF ou imagem)"
+    )
     ingest.add_argument("arquivo")
     ingest.add_argument("--visibilidade", required=True, choices=["publico", "interno"])
     ask = comandos.add_parser("ask", help="faz uma pergunta ao acervo público")

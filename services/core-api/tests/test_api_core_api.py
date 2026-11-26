@@ -89,3 +89,31 @@ def test_requisicao_com_host_desconhecido_e_recusada(api):
     resposta = api.get("/busca", params={"pergunta": "oi"}, headers={"host": "site-malicioso.test"})
 
     assert resposta.status_code == 400
+
+
+def test_lista_traz_publicos_e_internos_com_a_contagem_de_trechos(api):
+    _ingerir(api, "faq.md", FAQ + "\n\n## Endereço\n\nRua das Acácias, 120.", "publico")
+    _ingerir(api, "margens.md", SIGILOSO, "interno")
+
+    lista = api.get("/documentos")
+
+    assert lista.status_code == 200
+    documentos = {d["nome"]: d for d in lista.json()["documentos"]}
+    assert documentos["faq.md"]["visibilidade"] == "publico"
+    assert documentos["faq.md"]["trechos"] == 2
+    assert documentos["margens.md"]["visibilidade"] == "interno"
+    assert all(d["id"] and d["criado_em"] for d in documentos.values())
+
+
+def test_excluir_tira_o_documento_da_lista_e_da_busca(api):
+    id = _ingerir(api, "faq.md", FAQ, "publico").json()["id"]
+
+    assert api.delete(f"/documentos/{id}").status_code == 204
+
+    assert api.get("/documentos").json()["documentos"] == []
+    assert api.get("/busca", params={"pergunta": "horário"}).json()["resultados"] == []
+
+
+def test_excluir_documento_inexistente_ou_com_id_invalido(api):
+    assert api.delete("/documentos/00000000-0000-4000-8000-000000000000").status_code == 404
+    assert api.delete("/documentos/nao-e-um-id").status_code == 422

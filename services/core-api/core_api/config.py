@@ -6,6 +6,8 @@ import os
 from core_api.acervo import Acervo
 from core_api.dominio import Embedder, Repositorio
 from core_api.embeddings import EmbedderFalso, EmbedderOpenAI
+from core_api.extracao import Extrator, Ocr
+from core_api.ocr import OcrIndisponivel, OcrTesseract
 from core_api.repositorio_memoria import RepositorioMemoria
 from core_api.repositorio_postgres import RepositorioPostgres
 
@@ -15,7 +17,11 @@ log = logging.getLogger("core_api")
 def montar_acervo(ambiente: dict[str, str] | None = None) -> Acervo:
     ambiente = os.environ if ambiente is None else ambiente
     embedder = _embedder(ambiente)
-    return Acervo(_repositorio(ambiente, embedder.dimensao), embedder)
+    return Acervo(
+        _repositorio(ambiente, embedder.dimensao),
+        embedder,
+        Extrator(_ocr(ambiente)),
+    )
 
 
 def _embedder(ambiente: dict[str, str]) -> Embedder:
@@ -32,6 +38,23 @@ def _embedder(ambiente: dict[str, str]) -> Embedder:
         base_url = ambiente.get("EMBEDDINGS_BASE_URL") or "https://api.openai.com/v1"
         return EmbedderOpenAI(base_url, modelo, chave, dimensao)
     raise RuntimeError(f"EMBEDDINGS_PROVIDER desconhecido: {provedor!r}. Use 'fake' ou 'openai'.")
+
+
+def _ocr(ambiente: dict[str, str]) -> Ocr:
+    """`auto` usa o Tesseract se ele estiver instalado. `tesseract` exige. `nenhum` desliga."""
+    provedor = ambiente.get("OCR_PROVIDER") or "auto"
+    idioma = ambiente.get("OCR_IDIOMA") or "por"
+    if provedor not in ("auto", "tesseract", "nenhum"):
+        raise RuntimeError(
+            f"OCR_PROVIDER desconhecido: {provedor!r}. Use 'auto', 'tesseract' ou 'nenhum'."
+        )
+    if provedor != "nenhum" and OcrTesseract.disponivel():
+        return OcrTesseract(idioma)
+    if provedor == "tesseract":
+        raise RuntimeError("OCR_PROVIDER=tesseract, mas o programa tesseract não está instalado.")
+    if provedor == "auto":
+        log.warning("Tesseract não encontrado: imagens e PDFs escaneados não serão lidos.")
+    return OcrIndisponivel()
 
 
 def _repositorio(ambiente: dict[str, str], dimensao: int) -> Repositorio:
