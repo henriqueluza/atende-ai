@@ -10,6 +10,7 @@ from typing import Annotated
 import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field, ValidationError
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -72,5 +73,15 @@ def criar_app() -> Starlette:
     core_api = httpx.AsyncClient(
         base_url=os.environ.get("CORE_API_URL") or "http://localhost:8000", timeout=10
     )
+    # Só atende quem chama por um destes nomes (proteção contra DNS rebinding). "mcp-server" é
+    # o nome deste serviço dentro do docker compose: é por ele que o serviço do agente chega.
+    hosts = (os.environ.get("MCP_SERVER_HOSTS") or "localhost,127.0.0.1,mcp-server").split(",")
+    seguranca = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[f"{host}:*" for host in hosts] + hosts,
+        allowed_origins=[f"http://{host}:*" for host in hosts],
+    )
     # Sem estado entre chamadas e resposta em JSON: é o modo mais simples de operar e testar.
-    return criar_servidor(core_api).streamable_http_app(stateless_http=True, json_response=True)
+    return criar_servidor(core_api).streamable_http_app(
+        stateless_http=True, json_response=True, transport_security=seguranca
+    )
