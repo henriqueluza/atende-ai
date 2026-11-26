@@ -13,12 +13,17 @@ from core_api.dominio import (
     Consulta,
     Documento,
     DocumentoNoAcervo,
+    Modo,
     ResultadoBusca,
     Situacao,
     Trecho,
     TrechoGuardado,
     Visibilidade,
 )
+
+# Texto em minúsculas e sem acento, para a busca por palavras: cliente escreve "horario".
+# É uma expressão imutável, por isso pode alimentar uma coluna gerada.
+_NORMAL = "translate(lower({}), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn')"
 
 # Cada comando roda sozinho, e todos podem ser repetidos: é assim que um banco criado na
 # Etapa 1 ganha as colunas novas sem perder os dados.
@@ -43,6 +48,9 @@ _ESQUEMA = [
         embedding vector({dimensao}) NOT NULL
     )""",
     "ALTER TABLE trechos ADD COLUMN IF NOT EXISTS pagina integer",
+    "ALTER TABLE trechos ADD COLUMN IF NOT EXISTS palavras tsvector GENERATED ALWAYS AS "
+    f"(to_tsvector('portuguese', {_NORMAL.format('texto')})) STORED",
+    "CREATE INDEX IF NOT EXISTS trechos_palavras ON trechos USING gin (palavras)",
     "CREATE INDEX IF NOT EXISTS trechos_documento ON trechos (documento_id)",
     # O arquivo original fica guardado só enquanto espera na fila.
     """CREATE TABLE IF NOT EXISTS arquivos (
@@ -51,14 +59,55 @@ _ESQUEMA = [
     )""",
 ]
 
-# "<=>" é a distância de cosseno do pgvector: 0 = idêntico. O score do contrato é 1 - distância.
+# Índice aproximado (HNSW) para a busca por vetor. O pgvector só indexa até 2000 dimensões.
+_INDICE_VETORIAL = (
+    "CREATE INDEX IF NOT EXISTS trechos_embedding "
+    "ON trechos USING hnsw (embedding vector_cosine_ops)"
+)
+_DIMENSAO_MAXIMA_DO_INDICE = 2000
+
+# Uma consulta só para os três modos. "<=>" é a distância de cosseno do pgvector (0 = idêntico).
+# 1. `pergunta`: as palavras da pergunta já no radical, pelo dicionário de português.
+# 2. `candidatos`: os mais próximos pelo vetor (usa o índice HNSW) e os que têm alguma palavra
+#    da pergunta (usa o índice GIN). O filtro de visibilidade está nas duas metades.
+# 3. Para cada candidato, as duas notas exatas: semelhança do vetor e cobertura, que é a fração
+#    das palavras da pergunta presentes no trecho.
+# A pergunta passa pela mesma normalização de _NORMAL, escrita aqui por extenso para a
+# consulta ser um texto fixo.
 _BUSCA = """
-SELECT t.texto, d.nome, 1 - (t.embedding <=> %(vetor)s::vector) AS score
-FROM trechos t
-JOIN documentos d ON d.id = t.documento_id
-WHERE d.visibilidade = %(visibilidade)s
-ORDER BY t.embedding <=> %(vetor)s::vector
-LIMIT %(k)s
+WITH pergunta AS (
+    SELECT coalesce(array_agg(lexema), '{}') AS lexemas
+    FROM unnest(tsvector_to_array(to_tsvector('portuguese',
+        translate(lower(%(pergunta)s), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn')
+    ))) AS lexema
+    WHERE lexema ~ '^[a-z0-9]+$'
+),
+candidatos AS (
+    (SELECT t.id FROM trechos t JOIN documentos d ON d.id = t.documento_id
+     WHERE d.visibilidade = %(visibilidade)s AND %(usa_vetor)s
+     ORDER BY t.embedding <=> %(vetor)s::vector LIMIT %(candidatos)s)
+    UNION
+    (SELECT t.id FROM trechos t JOIN documentos d ON d.id = t.documento_id, pergunta p
+     WHERE d.visibilidade = %(visibilidade)s AND %(usa_palavras)s
+       AND cardinality(p.lexemas) > 0
+       AND t.palavras @@ to_tsquery('simple', array_to_string(p.lexemas, ' | '))
+     LIMIT %(candidatos)s)
+),
+notas AS (
+    SELECT t.texto, d.nome, t.id,
+        1 - (t.embedding <=> %(vetor)s::vector) AS semantica,
+        CASE WHEN cardinality(p.lexemas) = 0 THEN 0 ELSE
+            (SELECT count(*) FROM unnest(p.lexemas) AS lexema
+             WHERE lexema = ANY (tsvector_to_array(t.palavras)))::float8 / cardinality(p.lexemas)
+        END AS cobertura
+    FROM candidatos c
+    JOIN trechos t ON t.id = c.id
+    JOIN documentos d ON d.id = t.documento_id
+    CROSS JOIN pergunta p
+    -- De novo, de propósito: nenhum trecho sai daqui sem conferir a visibilidade.
+    WHERE d.visibilidade = %(visibilidade)s
+)
+SELECT texto, nome, semantica, cobertura FROM notas
 """
 
 # A ficha de um documento, com a contagem de trechos. São duas consultas escritas por
@@ -112,6 +161,8 @@ class RepositorioPostgres:
                 "SELECT atttypmod FROM pg_attribute "
                 "WHERE attrelid = 'trechos'::regclass AND attname = 'embedding'"
             ).fetchone()
+            if existente == self._dimensao and self._dimensao <= _DIMENSAO_MAXIMA_DO_INDICE:
+                conexao.execute(_INDICE_VETORIAL)
         if existente != self._dimensao:
             raise RuntimeError(
                 f"O banco foi criado com embeddings de {existente} dimensões e a configuração "
@@ -125,13 +176,28 @@ class RepositorioPostgres:
 
     def buscar(self, consulta: Consulta) -> list[ResultadoBusca]:
         parametros = {
+            "pergunta": consulta.pergunta,
             "vetor": _vetor(consulta.embedding),
             "visibilidade": consulta.visibilidade.value,
-            "k": consulta.k,
+            "usa_vetor": consulta.modo != Modo.PALAVRAS,
+            "usa_palavras": consulta.modo != Modo.SEMANTICA,
+            # Na híbrida, busca mais candidatos do que vai devolver: a ordem final muda.
+            "candidatos": consulta.k
+            if consulta.modo == Modo.SEMANTICA
+            else max(4 * consulta.k, 20),
         }
         with self._conexao() as conexao:
+            # Com filtro de visibilidade, o índice aproximado pode devolver menos que o pedido.
+            # A varredura iterativa (pgvector 0.8+) continua procurando até completar.
+            conexao.execute("SET LOCAL hnsw.iterative_scan = relaxed_order")
             linhas = conexao.execute(_BUSCA, parametros).fetchall()
-        return [ResultadoBusca(texto, nome, _limitar(score)) for texto, nome, score in linhas]
+        resultados = [
+            ResultadoBusca(texto, nome, _nota(consulta, semantica, cobertura))
+            for texto, nome, semantica, cobertura in linhas
+        ]
+        if consulta.modo == Modo.PALAVRAS:
+            resultados = [resultado for resultado in resultados if resultado.score > 0]
+        return sorted(resultados, key=lambda r: r.score, reverse=True)[: consulta.k]
 
     def listar(self) -> list[DocumentoNoAcervo]:
         with self._conexao() as conexao:
@@ -259,6 +325,15 @@ def _ficha(linha: tuple) -> DocumentoNoAcervo:
         ocr,
         paginas,
     )
+
+
+def _nota(consulta: Consulta, semantica: float, cobertura: float) -> float:
+    semantica = _limitar(semantica)
+    if consulta.modo == Modo.SEMANTICA:
+        return semantica
+    if consulta.modo == Modo.PALAVRAS:
+        return _limitar(cobertura)
+    return consulta.peso * semantica + (1 - consulta.peso) * _limitar(cobertura)
 
 
 def _vetor(embedding: list[float]) -> str:

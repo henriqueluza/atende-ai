@@ -142,9 +142,10 @@ def test_visibilidade_do_arquivo_e_obrigatoria_e_o_interno_nao_vaza(api, acervo)
     acervo.processar_proximo()
 
     assert sem_escolha.status_code == 422
-    assert _buscar(api, "preço da manicure") == []
-    internos = _buscar(api, "preço da manicure", visibilidade="interno")
-    assert internos[0]["documento"] == "precos.pdf"
+    for modo in ("semantica", "hibrida", "palavras"):
+        assert _buscar(api, "preço da manicure", modo=modo) == []
+        internos = _buscar(api, "preço da manicure", modo=modo, visibilidade="interno")
+        assert internos[0]["documento"] == "precos.pdf"
 
 
 def test_tornar_interno_tira_o_documento_da_busca_publica(api, acervo):
@@ -185,3 +186,17 @@ def test_o_trabalhador_processa_a_fila_sozinho(acervo):
             time.sleep(0.05)
 
     assert documento["situacao"] == "indexado"
+
+
+def test_busca_aceita_o_modo_e_recusa_modo_desconhecido(api):
+    api.post(
+        "/documentos",
+        json={
+            "nome": "faq.md",
+            "conteudo": "## Horário\n\nAbrimos às 9h.",
+            "visibilidade": "publico",
+        },
+    )
+
+    assert _buscar(api, "horario", modo="palavras")[0]["score"] == 1.0
+    assert api.get("/busca", params={"pergunta": "horario", "modo": "magica"}).status_code == 422

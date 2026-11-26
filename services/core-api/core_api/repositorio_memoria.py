@@ -10,12 +10,14 @@ from core_api.dominio import (
     Consulta,
     Documento,
     DocumentoNoAcervo,
+    Modo,
     ResultadoBusca,
     Situacao,
     Trecho,
     TrechoGuardado,
     Visibilidade,
 )
+from core_api.palavras import cobertura
 
 
 @dataclass
@@ -41,15 +43,13 @@ class RepositorioMemoria:
     def buscar(self, consulta: Consulta) -> list[ResultadoBusca]:
         with self._trava:
             resultados = [
-                ResultadoBusca(
-                    trecho.texto,
-                    registro.ficha.nome,
-                    _cosseno(consulta.embedding, trecho.embedding),
-                )
+                ResultadoBusca(trecho.texto, registro.ficha.nome, _score(consulta, trecho))
                 for registro in self._acervo.values()
                 if registro.ficha.visibilidade == consulta.visibilidade
                 for trecho in registro.trechos
             ]
+        if consulta.modo == Modo.PALAVRAS:
+            resultados = [resultado for resultado in resultados if resultado.score > 0]
         return sorted(resultados, key=lambda r: r.score, reverse=True)[: consulta.k]
 
     def listar(self) -> list[DocumentoNoAcervo]:
@@ -148,6 +148,16 @@ class RepositorioMemoria:
 
 def _agora() -> datetime:
     return datetime.now(UTC)
+
+
+def _score(consulta: Consulta, trecho: Trecho) -> float:
+    if consulta.modo == Modo.PALAVRAS:
+        return cobertura(consulta.pergunta, trecho.texto)
+    semantico = _cosseno(consulta.embedding, trecho.embedding)
+    if consulta.modo == Modo.SEMANTICA:
+        return semantico
+    por_palavras = cobertura(consulta.pergunta, trecho.texto)
+    return consulta.peso * semantico + (1 - consulta.peso) * por_palavras
 
 
 def _cosseno(a: list[float], b: list[float]) -> float:
