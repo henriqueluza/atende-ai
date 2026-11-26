@@ -1,0 +1,61 @@
+/* Tokens do atende-ai. Fonte da verdade: docs/design/atende-ai.md.
+   Estilo "moldura tingida, folha branca": a cor fica nos dados, não na moldura. */
+:root {
+  --ground: #f2f5f5; /* moldura: um passo de verde-azulado, a cor do produto em baixa saturação */
+  --surface: #ffffff; /* a folha de trabalho e os painéis */
+  --raised: #f4f6f7;
+  --active: #e6eaeb;
+  --border: #e4e8e9;
+  --rule: #eef1f1;
+  --control: #c9cdd0;
+  --text: #131416;
+  --muted: #55595b;
+  --faint: #63686a;
+  --accent: #1b6c80;
+  --accent-tint: #e3f0f3;
+  --primary: #1d1f20;
+  --primary-ink: #ffffff;
+  --positive: #1e7b4f;
+  --negative: #c4242a;
+  --warning: #92400e;
+  --pill-positive-bg: #dcfae5;
+  --pill-positive-ink: #04250e;
+  --pill-negative-bg: #ffedea;
+  --pill-negative-ink: #831c1e;
+  --pill-warning-bg: #fffbeb;
+  --pill-warning-ink: #92400e;
+  --pill-warning-edge: #fde68a;
+  --pill-neutral-bg: #e9eced;
+  --pill-neutral-ink: #353736;
+  --chart-1: var(--accent);
+  --chart-muted: #cfd3d6;
+  --grid: #e5e8e9;
+  --axis-ink: var(--muted);
+  --ink: var(--text);
+
+  --font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --fs-title: 22px;
+  --fs-section: 16px;
+  --fs-kpi: 28px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+
+  --sidebar-width: 228px;
+  --topbar: 48px;
+  --sheet-inset: 8px;
+  --radius-sheet: 16px;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --pad: 24px;
+  --gap: 24px;
+  --card-pad: 20px;
+  --control-height: 32px;
+  --row-height: 48px;
+  --nav-row: 32px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-press: 120ms;
+  --t-hover: 150ms;
+  --t-ui: 200ms;
+}

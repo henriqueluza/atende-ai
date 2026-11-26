@@ -51,3 +51,33 @@ jobs:
       # Reprova o PR se a busca piorar no acervo de exemplo (ver docs/adr/0008-avaliacao.md).
       - name: Avaliação da busca
         run: python ml/avaliacao/rodar.py
+
+  desktop:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    env:
+      # O CI só confere tipos, testes e build da tela: não precisa do executável do Electron.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Instala as dependências (pelo lock, sem scripts de instalação)
+        run: npm ci --ignore-scripts
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Testes
+        run: npm test
+
+      - name: Build
+        run: npx vite build
