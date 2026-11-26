@@ -5,6 +5,7 @@ from core_api.dominio import (
     AcervoIndisponivel,
     Consulta,
     Documento,
+    Modo,
     Situacao,
     Trecho,
     Visibilidade,
@@ -21,9 +22,9 @@ def _salvar(repositorio, nome, visibilidade, *textos):
     repositorio.salvar(Documento(str(uuid.uuid4()), nome, visibilidade), trechos)
 
 
-def _buscar(repositorio, pergunta, visibilidade, k=10):
+def _buscar(repositorio, pergunta, visibilidade, k=10, modo=Modo.SEMANTICA):
     [vetor] = embedder.gerar([pergunta])
-    return repositorio.buscar(Consulta(pergunta, vetor, k, visibilidade))
+    return repositorio.buscar(Consulta(pergunta, vetor, k, visibilidade, modo))
 
 
 def test_busca_ordena_do_mais_parecido_para_o_menos(repositorio):
@@ -77,6 +78,33 @@ def test_listar_conta_os_trechos_e_excluir_apaga_tudo(repositorio):
     assert repositorio.excluir(lista["faq.md"].id) is False
     assert [d.nome for d in repositorio.listar()] == ["margens.md"]
     assert _buscar(repositorio, "horário de abertura", Visibilidade.PUBLICO) == []
+
+
+def test_busca_por_palavras_ignora_acento_e_so_devolve_quem_tem_a_palavra(repositorio):
+    _salvar(
+        repositorio, "faq.md", Visibilidade.PUBLICO, "Horário de funcionamento", "Preço do corte"
+    )
+    _salvar(repositorio, "margens.md", Visibilidade.INTERNO, "Horário da diretoria")
+
+    resultados = _buscar(repositorio, "horario", Visibilidade.PUBLICO, modo=Modo.PALAVRAS)
+
+    assert [(r.documento, r.trecho, r.score) for r in resultados] == [
+        ("faq.md", "Horário de funcionamento", 1.0)
+    ]
+    assert _buscar(repositorio, "xyzzy", Visibilidade.PUBLICO, modo=Modo.PALAVRAS) == []
+
+
+def test_busca_hibrida_soma_as_duas_notas_e_respeita_a_visibilidade(repositorio):
+    _salvar(repositorio, "faq.md", Visibilidade.PUBLICO, "horário de abertura", "preço do corte")
+    _salvar(repositorio, "margens.md", Visibilidade.INTERNO, "horário de abertura da diretoria")
+
+    publicos = _buscar(repositorio, "horário de abertura", Visibilidade.PUBLICO, modo=Modo.HIBRIDA)
+    internos = _buscar(repositorio, "horário de abertura", Visibilidade.INTERNO, modo=Modo.HIBRIDA)
+
+    assert [r.trecho for r in publicos] == ["horário de abertura", "preço do corte"]
+    assert publicos[0].score == pytest.approx(1.0)  # igual no vetor e todas as palavras
+    assert publicos[1].score == pytest.approx(0.0, abs=0.05)
+    assert [r.documento for r in internos] == ["margens.md"]
 
 
 def test_fila_entrega_o_mais_antigo_guarda_os_trechos_e_registra_a_falha(repositorio):
@@ -175,9 +203,8 @@ def test_postgres_atualiza_um_banco_criado_na_etapa_1_sem_perder_os_dados(url_po
         Situacao.INDEXADO,
         1,
     )
-    assert [r.trecho for r in _buscar(repositorio, "horário antigo", Visibilidade.PUBLICO)] == [
-        "horário antigo"
-    ]
+    por_palavras = _buscar(repositorio, "horario", Visibilidade.PUBLICO, modo=Modo.PALAVRAS)
+    assert [r.trecho for r in por_palavras] == ["horário antigo"]
 
 
 def test_postgres_recusa_iniciar_com_dimensao_diferente_da_do_banco(url_postgres_limpo):

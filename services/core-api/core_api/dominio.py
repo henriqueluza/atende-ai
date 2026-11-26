@@ -27,6 +27,14 @@ class Situacao(StrEnum):
     FALHOU = "falhou"
 
 
+class Modo(StrEnum):
+    """Como a busca compara a pergunta com os trechos. Ver ADR 0007."""
+
+    SEMANTICA = "semantica"  # só o embedding
+    PALAVRAS = "palavras"  # só as palavras em comum
+    HIBRIDA = "hibrida"  # os dois, somados com peso
+
+
 @dataclass(frozen=True)
 class Documento:
     id: str
@@ -83,12 +91,14 @@ class ResultadoBusca:
 
 @dataclass(frozen=True)
 class Consulta:
-    """Tudo o que o repositório precisa para buscar."""
+    """Tudo o que o repositório precisa para buscar. `peso` é a parte do embedding na híbrida."""
 
     pergunta: str
     embedding: list[float]
     k: int
     visibilidade: Visibilidade
+    modo: Modo = Modo.SEMANTICA
+    peso: float = 0.5
 
 
 class Embedder(Protocol):

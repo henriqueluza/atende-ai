@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+from dataclasses import dataclass
 
 from core_api.chunking import dividir_em_trechos
 from core_api.dominio import (
@@ -10,6 +11,7 @@ from core_api.dominio import (
     Documento,
     DocumentoNoAcervo,
     Embedder,
+    Modo,
     Repositorio,
     ResultadoBusca,
     Situacao,
@@ -29,16 +31,24 @@ class DocumentoVazio(ValueError):
     """O conteúdo enviado não tem texto para indexar."""
 
 
+@dataclass(frozen=True)
+class ConfiguracaoDaBusca:
+    modo: Modo = Modo.HIBRIDA
+    peso_semantico: float = 0.5  # na híbrida: quanto vale o embedding (o resto são as palavras)
+
+
 class Acervo:
     def __init__(
         self,
         repositorio: Repositorio,
         embedder: Embedder,
         extrator: Extrator | None = None,
+        busca: ConfiguracaoDaBusca | None = None,
     ) -> None:
         self.repositorio = repositorio
         self._embedder = embedder
         self._extrator = extrator or Extrator(OcrIndisponivel())
+        self.busca = busca or ConfiguracaoDaBusca()
 
     def ingerir(
         self, nome: str, conteudo: str, visibilidade: Visibilidade
@@ -101,9 +111,19 @@ class Acervo:
             self.repositorio.falhar(id, "Não consegui processar este arquivo.")
         return True
 
-    def buscar(self, pergunta: str, k: int, visibilidade: Visibilidade) -> list[ResultadoBusca]:
-        [embedding] = self._embedder.gerar([pergunta])
-        return self.repositorio.buscar(Consulta(pergunta, embedding, k, visibilidade))
+    def buscar(
+        self, pergunta: str, k: int, visibilidade: Visibilidade, modo: Modo | None = None
+    ) -> list[ResultadoBusca]:
+        modo = modo or self.busca.modo
+        # A busca só por palavras não precisa do embedding (nem do serviço que o gera).
+        embedding = (
+            [0.0] * self._embedder.dimensao
+            if modo == Modo.PALAVRAS
+            else self._embedder.gerar([pergunta])[0]
+        )
+        return self.repositorio.buscar(
+            Consulta(pergunta, embedding, k, visibilidade, modo, self.busca.peso_semantico)
+        )
 
     def listar(self) -> list[DocumentoNoAcervo]:
         """Todos os documentos do acervo. É para quem administra: inclui os internos."""

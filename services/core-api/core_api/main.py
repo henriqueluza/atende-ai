@@ -16,7 +16,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from core_api.acervo import Acervo, DocumentoVazio
 from core_api.config import montar_acervo
-from core_api.dominio import AcervoIndisponivel, DocumentoNoAcervo, Situacao, Visibilidade
+from core_api.dominio import AcervoIndisponivel, DocumentoNoAcervo, Modo, Situacao, Visibilidade
 from core_api.extracao import TAMANHO_MAXIMO, ErroDeExtracao
 from core_api.fila import Trabalhador
 
@@ -215,8 +215,10 @@ def criar_app(acervo: Acervo | None = None, processar_fila: bool | None = None) 
         k: Annotated[int, Query(ge=1, le=10)] = 3,
         # Quem não informa a visibilidade só enxerga o que é público.
         visibilidade: Visibilidade = Visibilidade.PUBLICO,
+        # Sem `modo`, vale o padrão do servidor (BUSCA_MODO).
+        modo: Modo | None = None,
     ) -> RespostaBusca:
-        resultados = acervo.buscar(pergunta, k, visibilidade)
+        resultados = acervo.buscar(pergunta, k, visibilidade, modo)
         return RespostaBusca(
             resultados=[
                 Resultado(trecho=r.trecho, documento=r.documento, score=r.score) for r in resultados

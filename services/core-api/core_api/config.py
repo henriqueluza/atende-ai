@@ -3,8 +3,8 @@
 import logging
 import os
 
-from core_api.acervo import Acervo
-from core_api.dominio import Embedder, Repositorio
+from core_api.acervo import Acervo, ConfiguracaoDaBusca
+from core_api.dominio import Embedder, Modo, Repositorio
 from core_api.embeddings import EmbedderFalso, EmbedderOpenAI
 from core_api.extracao import Extrator, Ocr
 from core_api.ocr import OcrIndisponivel, OcrTesseract
@@ -21,6 +21,7 @@ def montar_acervo(ambiente: dict[str, str] | None = None) -> Acervo:
         _repositorio(ambiente, embedder.dimensao),
         embedder,
         Extrator(_ocr(ambiente)),
+        _busca(ambiente),
     )
 
 
@@ -55,6 +56,21 @@ def _ocr(ambiente: dict[str, str]) -> Ocr:
     if provedor == "auto":
         log.warning("Tesseract não encontrado: imagens e PDFs escaneados não serão lidos.")
     return OcrIndisponivel()
+
+
+def _busca(ambiente: dict[str, str]) -> ConfiguracaoDaBusca:
+    modo = ambiente.get("BUSCA_MODO") or Modo.HIBRIDA.value
+    if modo not in [opcao.value for opcao in Modo]:
+        raise RuntimeError(
+            f"BUSCA_MODO desconhecido: {modo!r}. Use 'hibrida', 'semantica' ou 'palavras'."
+        )
+    try:
+        peso = float(ambiente.get("BUSCA_PESO_SEMANTICO") or 0.5)
+    except ValueError:
+        peso = -1
+    if not 0 <= peso <= 1:
+        raise RuntimeError("BUSCA_PESO_SEMANTICO precisa ser um número entre 0 e 1.")
+    return ConfiguracaoDaBusca(Modo(modo), peso)
 
 
 def _repositorio(ambiente: dict[str, str], dimensao: int) -> Repositorio:
