@@ -30,6 +30,7 @@ class _Registro:
 class RepositorioMemoria:
     def __init__(self) -> None:
         self._acervo: dict[str, _Registro] = {}  # por nome, que é a identidade do documento
+        self._avaliacoes: list[dict[str, Any]] = []
         # A fila roda em outra thread: toda leitura e escrita passa por esta trava.
         self._trava = threading.RLock()
 
@@ -134,6 +135,14 @@ class RepositorioMemoria:
             for registro in parados:
                 registro.ficha = replace(registro.ficha, situacao=Situacao.NA_FILA, andamento=None)
             return len(parados)
+
+    def guardar_avaliacao(self, dados: dict[str, Any]) -> None:
+        with self._trava:
+            self._avaliacoes.append(dados)
+
+    def avaliacoes(self) -> list[dict[str, Any]]:
+        with self._trava:
+            return list(self._avaliacoes)
 
     def _por_id(self, id: str) -> _Registro | None:
         return next((r for r in self._acervo.values() if r.ficha.id == id), None)

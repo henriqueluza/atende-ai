@@ -47,3 +47,7 @@ jobs:
 
       - name: Testes
         run: pytest
+
+      # Reprova o PR se a busca piorar no acervo de exemplo (ver docs/adr/0008-avaliacao.md).
+      - name: Avaliação da busca
+        run: python ml/avaliacao/rodar.py

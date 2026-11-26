@@ -168,6 +168,13 @@ def test_trocar_a_visibilidade_muda_quem_encontra_o_documento(repositorio):
     ]
 
 
+def test_avaliacoes_ficam_guardadas_na_ordem(repositorio):
+    repositorio.guardar_avaliacao({"versao": "a", "acertos": 1})
+    repositorio.guardar_avaliacao({"versao": "b", "acertos": 2})
+
+    assert [execucao["versao"] for execucao in repositorio.avaliacoes()] == ["a", "b"]
+
+
 def test_postgres_atualiza_um_banco_criado_na_etapa_1_sem_perder_os_dados(url_postgres_limpo):
     import psycopg
 

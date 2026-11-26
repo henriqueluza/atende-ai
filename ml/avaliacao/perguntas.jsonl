@@ -1,0 +1,30 @@
+{"pergunta": "Que horas vocês abrem?", "esperado": "faq-salao.md"}
+{"pergunta": "vcs abrem domingo?", "esperado": "faq-salao.md"}
+{"pergunta": "Qual o horario de funcionamento", "esperado": "faq-salao.md"}
+{"pergunta": "Onde fica o salão?", "esperado": "faq-salao.md"}
+{"pergunta": "tem estacionamento?", "esperado": "faq-salao.md"}
+{"pergunta": "Como faço para agendar?", "esperado": "faq-salao.md"}
+{"pergunta": "Posso pagar com pix?", "esperado": "faq-salao.md"}
+{"pergunta": "aceita cartao de credito", "esperado": "faq-salao.md"}
+{"pergunta": "Dá para parcelar?", "esperado": "faq-salao.md"}
+{"pergunta": "Qual a tolerância de atraso?", "esperado": "faq-salao.md"}
+{"pergunta": "Quanto custa o corte infantil?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "qual o valor da hidratacao", "esperado": "servicos-e-precos.md"}
+{"pergunta": "Vocês fazem progressiva?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "Quanto custam as mechas?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "preço da manicure e pedicure juntas", "esperado": "servicos-e-precos.md"}
+{"pergunta": "Quanto é a esmaltação em gel?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "Fazem sobrancelha com henna?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "quanto custa tirar o buço", "esperado": "servicos-e-precos.md"}
+{"pergunta": "Tem maquiagem para noiva?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "O dia da noiva inclui o quê?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "tem pacote de escova?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "A avaliação da coloração é paga?", "esperado": "servicos-e-precos.md"}
+{"pergunta": "Posso remarcar meu horário?", "esperado": "politica-de-agendamento.md"}
+{"pergunta": "O que acontece se eu faltar sem avisar?", "esperado": "politica-de-agendamento.md"}
+{"pergunta": "Preciso pagar sinal?", "esperado": "politica-de-agendamento.md"}
+{"pergunta": "devolvem o sinal se eu cancelar?", "esperado": "politica-de-agendamento.md"}
+{"pergunta": "Posso levar meu filho?", "esperado": "politica-de-agendamento.md"}
+{"pergunta": "criança precisa de acompanhante?", "esperado": "politica-de-agendamento.md"}
+{"pergunta": "Tem lista de espera?", "esperado": "politica-de-agendamento.md"}
+{"pergunta": "a agenda ta cheia, como faço?", "esperado": "politica-de-agendamento.md"}

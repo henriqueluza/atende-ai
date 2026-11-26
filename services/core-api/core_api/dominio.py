@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class AcervoIndisponivel(Exception):
@@ -154,4 +154,12 @@ class Repositorio(Protocol):
 
     def retomar_interrompidos(self) -> int:
         """Devolve à fila o que ficou pela metade quando o serviço parou."""
+        ...
+
+    # --- avaliações da busca ---
+
+    def guardar_avaliacao(self, dados: dict[str, Any]) -> None: ...
+
+    def avaliacoes(self) -> list[dict[str, Any]]:
+        """Da mais antiga para a mais nova."""
         ...

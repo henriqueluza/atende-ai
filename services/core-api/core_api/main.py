@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from core_api.acervo import Acervo, DocumentoVazio
+from core_api.avaliacao import PerguntaDeTeste, avaliar
 from core_api.config import montar_acervo
 from core_api.dominio import AcervoIndisponivel, DocumentoNoAcervo, Modo, Situacao, Visibilidade
 from core_api.extracao import TAMANHO_MAXIMO, ErroDeExtracao
@@ -94,6 +95,43 @@ class Resultado(BaseModel):
 
 class RespostaBusca(BaseModel):
     resultados: list[Resultado]
+
+
+class PerguntaDoConjunto(BaseModel):
+    pergunta: str = Field(min_length=1, max_length=500)
+    esperado: str = Field(min_length=1, max_length=200)
+
+
+class NovaExecucao(BaseModel):
+    # Sem perguntas, repete o conjunto da última execução.
+    perguntas: list[PerguntaDoConjunto] | None = Field(default=None, min_length=1, max_length=500)
+    k: int = Field(default=3, ge=1, le=10)
+    modo: Modo | None = None
+    versao: str = Field(default="", max_length=40, pattern=r"^[\w.\-]*$")
+    nota: str | None = Field(default=None, max_length=80)
+
+
+class Execucao(BaseModel):
+    data: datetime
+    versao: str
+    nota: str | None
+    modo: Modo
+    perguntas: int
+    acertos: int
+    mrr: float
+
+
+class PerguntaAvaliada(BaseModel):
+    pergunta: str
+    esperado: str
+    posicao: int | None
+    primeiro: str
+
+
+class Avaliacao(BaseModel):
+    k: int
+    execucoes: list[Execucao]
+    perguntas: list[PerguntaAvaliada]  # o detalhe da última execução
 
 
 def criar_app(acervo: Acervo | None = None, processar_fila: bool | None = None) -> FastAPI:
@@ -223,6 +261,34 @@ def criar_app(acervo: Acervo | None = None, processar_fila: bool | None = None) 
             resultados=[
                 Resultado(trecho=r.trecho, documento=r.documento, score=r.score) for r in resultados
             ]
+        )
+
+    @app.post("/avaliacao/execucoes", status_code=201)
+    def rodar_avaliacao(nova: NovaExecucao) -> Execucao:
+        """Roda o conjunto de perguntas contra o acervo público e guarda o resultado."""
+        if nova.perguntas is not None:
+            perguntas = [PerguntaDeTeste(p.pergunta, p.esperado) for p in nova.perguntas]
+        else:
+            anteriores = acervo.repositorio.avaliacoes()
+            if not anteriores:
+                raise HTTPException(422, "Ainda não há um conjunto de perguntas. Envie um.")
+            perguntas = [
+                PerguntaDeTeste(p["pergunta"], p["esperado"]) for p in anteriores[-1]["detalhe"]
+            ]
+        execucao = avaliar(acervo, perguntas, nova.k, nova.modo, nova.versao, nova.nota)
+        acervo.repositorio.guardar_avaliacao(execucao)
+        return Execucao.model_validate(execucao)
+
+    @app.get("/avaliacao")
+    def avaliacao() -> Avaliacao:
+        execucoes = acervo.repositorio.avaliacoes()[-50:]
+        ultima = execucoes[-1] if execucoes else None
+        return Avaliacao(
+            k=ultima["k"] if ultima else 3,
+            execucoes=[Execucao.model_validate(execucao) for execucao in execucoes],
+            perguntas=[PerguntaAvaliada.model_validate(p) for p in ultima["detalhe"]]
+            if ultima
+            else [],
         )
 
     return app

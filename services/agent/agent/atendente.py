@@ -8,9 +8,11 @@ from mcp import Client
 from agent.llm import LLM, SEM_RESPOSTA, Fonte
 
 # Abaixo disso o trecho quase não tem relação com a pergunta e só atrapalharia a resposta.
-# O valor certo depende do modelo de embedding: 0.1 foi ajustado para o embedder falso.
-# Ao trocar de modelo, ajuste pela variável SCORE_MINIMO (ver cli.py).
-SCORE_MINIMO = 0.1
+# O valor foi medido com a busca híbrida e o embedder falso (python ml/avaliacao/rodar.py):
+# 0.2 recusa 70% das perguntas fora do acervo e mantém 90% das que têm resposta. Com 0.1,
+# só 40% das perguntas fora do acervo eram recusadas. Ao trocar de modelo de embedding,
+# meça de novo e ajuste pela variável SCORE_MINIMO (ver cli.py).
+SCORE_MINIMO = 0.2
 
 Buscar = Callable[[str, int], Awaitable[list[Fonte]]]
 
